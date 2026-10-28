@@ -67,6 +67,7 @@ def equalize_gray(gray):
 
 
 def histogram_equalization(arr):
+    """Эквализация через яркость (Y) для сохранения цветов."""
     src = arr.astype(np.float32)
     gray = rgb_to_gray(src)
     eq = equalize_gray(gray).astype(np.float32)
@@ -76,6 +77,14 @@ def histogram_equalization(arr):
     if np.any(black):
         out[black] = eq[black, None]
     return clamp255(out)
+
+
+def histogram_equalization_rgb(arr):
+    """Поканальная эквализация RGB (может искажать цвета)."""
+    out = np.empty_like(arr)
+    for channel in range(3):
+        out[:, :, channel] = equalize_gray(arr[:, :, channel])
+    return out
 
 
 def convolve_gray(gray, kernel):
@@ -161,6 +170,7 @@ class MainWindow(QWidget):
 
         outer = QVBoxLayout(self)
 
+        # Кнопки
         buttons = QHBoxLayout()
         load_btn = QPushButton("Открыть изображение...")
         load_btn.clicked.connect(self.open_image)
@@ -174,12 +184,16 @@ class MainWindow(QWidget):
         buttons.addStretch(1)
         outer.addLayout(buttons)
 
+        # Панель управления
         controls = QGroupBox("Метод обработки")
         grid = QGridLayout(controls)
         self.method = QComboBox()
+        
+        # Добавлен новый метод эквализации
         self.method.addItems([
             "Линейное контрастирование",
-            "Эквализация гистограммы",
+            "Эквализация гистограммы (по яркости Y)",
+            "Эквализация гистограммы (по каналам RGB)",
             "Высокочастотный фильтр: Лапласиан",
             "Высокочастотный фильтр: нерезкая маска",
         ])
@@ -207,6 +221,7 @@ class MainWindow(QWidget):
         grid.addWidget(apply_btn, 2, 0, 1, 3)
         outer.addWidget(controls)
 
+        # Области просмотра
         views = QHBoxLayout()
         self.original_view = ImageView("Исходное изображение")
         self.result_view = ImageView("Результат")
@@ -214,6 +229,7 @@ class MainWindow(QWidget):
         views.addWidget(self.result_view)
         outer.addLayout(views, 1)
 
+        # Гистограммы
         hist_group = QGroupBox("Гистограммы яркости")
         hist_layout = QHBoxLayout(hist_group)
         self.hist_before = ImageView("До обработки")
@@ -231,7 +247,8 @@ class MainWindow(QWidget):
         self.update_controls()
 
     def update_controls(self):
-        sharpening = self.method.currentIndex() >= 2
+        # Фильтры резкости теперь начинаются с индекса 3
+        sharpening = self.method.currentIndex() >= 3
         self.strength.setEnabled(sharpening)
         self.strength_value.setEnabled(sharpening)
         if self.original is not None:
@@ -260,13 +277,17 @@ class MainWindow(QWidget):
             return
         idx = self.method.currentIndex()
         k = self.strength.value() / 10.0
+        
         if idx == 0:
             self.result = linear_contrast(self.original)
             name = "линейное контрастирование"
         elif idx == 1:
             self.result = histogram_equalization(self.original)
-            name = "эквализация гистограммы"
+            name = "эквализация гистограммы (по яркости Y)"
         elif idx == 2:
+            self.result = histogram_equalization_rgb(self.original)
+            name = "эквализация гистограммы (по каналам RGB)"
+        elif idx == 3:
             self.result = laplacian_sharpen(self.original, strength=k)
             name = f"Лапласиан, коэффициент {k:.1f}"
         else:
